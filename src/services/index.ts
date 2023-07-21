@@ -1,0 +1,1 @@
+export {healthMetricService} from "./factory";
