@@ -77,7 +77,7 @@ FROM state_periods(
                 GROUP BY location;      
                 `
             } else {
-                if (location) {
+                if (!location) {
                     return `
                 SELECT bucket,
                        round(approx_percentile(0.1, rollup(average_response_time)))  as p10,
@@ -89,10 +89,10 @@ FROM state_periods(
                 -- Database table will change based on DateFilter
                 from ${view}
                 WHERE bucket >= now() - Interval '3 days'
-                AND location = "${location}"
                 GROUP BY bucket;
                     `
                 } else {
+
                     return `
                     SELECT location,
                                bucket,
@@ -102,6 +102,7 @@ FROM state_periods(
                         
                         from ${view}
                         WHERE bucket >= now() - Interval '3 days'
+                        AND location = "${location}"
                         ORDER BY bucket DESC;
                     
                     `
