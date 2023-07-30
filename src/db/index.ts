@@ -5,7 +5,7 @@ const Pool = PG.Pool;
 export const pool = new Pool({
   user: "remoteops-master",
   host: "localhost",
-  database: "posgres",
+  database: "postgres",
   password: "metric123",
   port: 5432
 });
