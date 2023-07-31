@@ -12,7 +12,7 @@ export class HealthMetricService {
             WHERE UserEvents_mock.timestamp > '${startDate}'::timestamp;
         `)
         const status = await pool.query(`
-                    SELECT status
+            SELECT status
             from userevents_mock
             where home_id = text(9)
             ORDER BY timestamp DESC
@@ -20,14 +20,13 @@ export class HealthMetricService {
             
             `)
         const aggData = await pool.query(`
-
-SELECT start_time as "startTime", end_time as "endTime"
-FROM state_periods(
-        (SELECT state_agg(timestamp, status)
-         FROM userevents_mock
-         WHERE timestamp > '${startDate}'::timestamp),
-         ${status.rows[0].status}
-    );            
+        SELECT start_time as "startTime", end_time as "endTime"
+        FROM state_periods(
+                (SELECT state_agg(timestamp, status)
+                 FROM userevents_mock
+                 WHERE timestamp > '${startDate}'::timestamp),
+                 ${status.rows[0].status}
+    );
             `, [])
         return {
             uptime: responseData.rows[0].uptime,
@@ -103,8 +102,7 @@ FROM state_periods(
                         from ${view}
                         WHERE bucket >= now() - Interval '3 days'
                         AND location = "${location}"
-                        ORDER BY bucket DESC;
-                    
+                        ORDER BY bucket DESC;                   
                     `
                 }
 
