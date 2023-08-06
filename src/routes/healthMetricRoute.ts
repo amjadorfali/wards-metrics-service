@@ -28,8 +28,11 @@ healthMetricRoute.get("/logs",
         res: Response,
         next: NextFunction
     ) => {
-        const {startDate, endDate,taskId, offset} = req.query as any
-        return healthMetricService.getLogs(startDate, endDate, taskId, offset);
+        const {startDate, endDate,taskId, offset, limit} = req.query as any
+        return healthMetricService.getLogs(startDate, endDate, taskId, offset,limit).then(response => res.json(getResponse.success(response.rows)))
+        .catch((e) => {
+            next(e);
+        });
     });
 
 healthMetricRoute.get("/graph",

@@ -16,15 +16,15 @@ export class HealthMetricService {
             SELECT floor(AVG(responseTime))                                 AS "performance",
                    floor(AVG(CASE WHEN status = 1 THEN 100.0 ELSE 0.0 END)) AS "uptime"
             
-            FROM userevents_mock
-            WHERE UserEvents_mock.timestamp >= '${startDate}'::timestamp
-                AND UserEvents_mock.timestamp <= '${endDate}'::timestamp;
+            FROM HealthMetric
+            WHERE HealthMetric.timestamp >= '${startDate}'::timestamp
+                AND HealthMetric.timestamp <= '${endDate}'::timestamp;
         `)
         // TODO: Change to taskId
         const status = await pool.query(`
             SELECT status
-            from userevents_mock
-            WHERE home_id = text(${taskId})
+            from HealthMetric
+            WHERE taskId = text(${taskId})
             ORDER BY timestamp DESC
             LIMIT 1;
             
@@ -33,8 +33,8 @@ export class HealthMetricService {
         const aggData = await pool.query(`
         SELECT start_time as "startTime", end_time as "endTime"
         FROM state_periods(
-                (SELECT state_agg(timestamp, status)
-                 FROM userevents_mock
+                (SELECT state_agg(timestamp, CAST(status as BIGINT))
+                 FROM HealthMetric WHERE taskId = text(${taskId})),
                  ${status.rows[0].status}
                  );
                  `, [])
@@ -45,16 +45,18 @@ export class HealthMetricService {
         }
     }
 
-    getLogs(startDate: string | undefined, endDate: string | undefined, taskId: string, offset: number = 0) {
-        pool.query(`
+    // TODO:Filter by incidents if needed (Status != 1)
+    getLogs(startDate: string | undefined, endDate: string | undefined, taskId: string, offset: number = 0,limit:number=0) {
+      return  pool.query(`
         SELECT *
-        FROM userevents_mock
+        FROM HealthMetric
         WHERE timestamp >= '${startDate}'::timestamp
             AND timestamp <= '${endDate}'::timestamp 
             AND taskId = '${taskId}'
+
         ORDER BY timestamp DESC
-        OFFSET 10
-        LIMIT 10
+        OFFSET ${offset}
+        LIMIT ${limit}
 `)
     }
 
@@ -62,8 +64,8 @@ export class HealthMetricService {
         pool.query("")
     }
 
-    getGraphData(startDate: string, endDate: string, type:string, location: string, taskId: string) {
-       return  this.queryDataInterval(startDate, endDate, type, location, taskId)
+    getGraphData(startDate: string, endDate: string, type:string, region: string, taskId: string) {
+       return  this.queryDataInterval(startDate, endDate, type, region, taskId)
     }
 
     create(metricId: string, method: string, responseTime: number, status: number, timestamp: number) {
@@ -72,7 +74,7 @@ export class HealthMetricService {
             [metricId, method, responseTime, status, timestamp]);
     }
 
-    async queryDataInterval(startDate: string, endDate: string, type: string, location: string, taskId:string) {
+    async queryDataInterval(startDate: string, endDate: string, type: string, region: string, taskId:string) {
         const startDateMoment = moment(startDate)
         const endDateMoment = moment(endDate)
 
@@ -81,42 +83,42 @@ export class HealthMetricService {
             // Fetch all data from the DB for a single day
             // TODO: Change to taskId
             const {rows} = await pool.query<{
-                location: string,
+                region: string,
                 data: { responseTime: number, status: number, timestamp: string }[]
             }>(`
-            SELECT location,
+            SELECT region,
                    json_agg(json_build_object('responseTime', responseTime, 'status', status, 'timestamp', timestamp)) AS data
-            from UserEvents_mock
+            from HealthMetric
             WHERE 
-                home_id = text(${taskId})
+                taskId = text(${taskId})
                 AND timestamp >= '${startDate}'::timestamp
                 AND timestamp <= '${endDate}'::timestamp
-            GROUP BY location;
+            GROUP BY region;
             `)
 
             return rows
         } else {
-            const view = startDateMoment.diff(endDateMoment, "d",) > 15 ? 'daily_user_events' : 'hourly_user_events'
+            const view = startDateMoment.diff(endDateMoment, "d",) > 15 ? 'daily_health_metrics' : 'hourly_health_metrics'
             if (type === 'uptime') {
             // Fetch the Uptime from VIEW for a date interval
             // TODO: Change to taskId
 
-                const {rows}  = await pool.query<{location:string, data:{'average_status_percentage':number, timestamp:string }[]}>(`
-                SELECT location,
+                const {rows}  = await pool.query<{region:string, data:{'average_status_percentage':number, timestamp:string }[]}>(`
+                SELECT region,
                        json_agg(json_build_object('average_status_percentage', average_status_percentage, 'timestamp', bucket)) AS data
                 from ${view}
                 WHERE 
-                    home_id = text(${taskId})
+                    taskId = text(${taskId})
                     AND bucket >= '${startDate}'::timestamp
                     AND bucket <= '${endDate}'::timestamp
-                GROUP BY location;      
+                GROUP BY region;      
                 `)
 
 
                 return rows
             } else {
-                if (!location) {
-            // Fetch the ResponseTime from VIEW for a date interval for all locations
+                if (!region) {
+            // Fetch the ResponseTime from VIEW for a date interval for all regions
             // TODO: Change to taskId
 
                     const {rows} =  await pool.query<{bucket:string, "p10":number,
@@ -133,7 +135,7 @@ export class HealthMetricService {
                        round(approx_percentile(0.99, rollup(average_response_time))) as p99
                 from ${view}
                 WHERE 
-                    home_id = text(${taskId})
+                    taskId = text(${taskId})
                     AND bucket >= '${startDate}'::timestamp
                     AND bucket <= '${endDate}'::timestamp
                 GROUP BY bucket;
@@ -152,18 +154,18 @@ export class HealthMetricService {
                         }, {p10 : [], p50 : [], p90 : [], p95 : [], p99 : [] } as ResponseTimePercentiles);
 
                 } else {
-            // Fetch the ResponseTime from VIEW for a date interval for 1 location
+            // Fetch the ResponseTime from VIEW for a date interval for 1 region
             // TODO: Change to taskId
                     const {rows} = await pool.query<{bucket:string, 'floored_array': [number,number,number,number,number]}>(`
-                    SELECT location,
+                    SELECT region,
                                bucket,
                                ARRAY(SELECT Cast(FLOOR(element) AS int)
                                      FROM UNNEST(approx_percentile_array(array [0.1, 0.5, 0.90, 0.95, 0.99],
                                                                          average_response_time)) AS element) AS floored_array
                         from ${view}
                         WHERE 
-                            home_id = text(${taskId})
-                            AND location = '${location}'
+                            taskId = text(${taskId})
+                            AND region = '${region}'
                             AND bucket >= '${startDate}'::timestamp
                             AND bucket <= '${endDate}'::timestamp
                         ORDER BY bucket DESC;                   
