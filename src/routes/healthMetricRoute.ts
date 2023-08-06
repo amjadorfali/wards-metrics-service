@@ -2,8 +2,8 @@ import express, {NextFunction, Request, response, Response} from "express";
 import {healthMetricService} from "../services";
 import {validate} from "../utils/validations";
 import {body} from "express-validator";
-import {getResponse} from "../utils/getResponse";
-
+import {getResponse} from "../utils/getResponse"
+import moment from 'moment'
 export const healthMetricRoute = express.Router();
 
 
@@ -14,37 +14,24 @@ healthMetricRoute.get("/overview",
         res: Response,
         next: NextFunction
     ) => {
-        const {startDate, endDate} = req.query as { startDate: string, endDate: string }
-        return healthMetricService.getOverview(startDate, endDate)
+        const {startDate, endDate, taskId } = req.query as { startDate: string, endDate: string, taskId:string }
+        return healthMetricService.getOverview(startDate, endDate,taskId)
             .then(response => res.json(getResponse.success(response)))
             .catch((e) => {
                 next(e);
             });
     });
+
 healthMetricRoute.get("/logs",
-    validate([
-        body("date", "InvalidValue"),
-    ]),
     async (
         req: Request,
         res: Response,
         next: NextFunction
     ) => {
-        const {startDate, endDate} = req.params
-        return healthMetricService.getOverview(startDate, endDate);
+        const {startDate, endDate,taskId, offset} = req.query as any
+        return healthMetricService.getLogs(startDate, endDate, taskId, offset);
     });
-healthMetricRoute.get("/details",
-    validate([
-        body("date", "InvalidValue"),
-    ]),
-    async (
-        req: Request,
-        res: Response,
-        next: NextFunction
-    ) => {
-        const {startDate, endDate} = req.params
-        return healthMetricService.getOverview(startDate, endDate);
-    });
+
 healthMetricRoute.get("/graph",
     validate([
         body("date", "InvalidValue"),
@@ -54,9 +41,14 @@ healthMetricRoute.get("/graph",
         res: Response,
         next: NextFunction
     ) => {
-        const {startDate, endDate, type, location} = req.params
-        return healthMetricService.getGraphData(startDate, endDate, type, location);
+        const {startDate, endDate, type, location,taskId} = req.query as any
+        return healthMetricService.getGraphData(startDate, moment(endDate).endOf('day').format(), type, location, taskId)
+            .then(response => res.json(getResponse.success(response)))
+            .catch((e) => {
+                next(e);
+            });
     });
+
 healthMetricRoute.post("/",
     validate([
         body("userId", "InvalidValue").isString(),
