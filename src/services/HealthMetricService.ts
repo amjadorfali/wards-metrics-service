@@ -17,31 +17,34 @@ export class HealthMetricService {
                    floor(AVG(CASE WHEN status = 1 THEN 100.0 ELSE 0.0 END)) AS "uptime"
             
             FROM HealthMetric
-            WHERE HealthMetric.timestamp >= '${startDate}'::timestamp
-                AND HealthMetric.timestamp <= '${endDate}'::timestamp;
+            WHERE HealthMetric.timestamp >= '${startDate}'
+                AND HealthMetric.timestamp <= '${endDate}';
         `)
         // TODO: Change to taskId
         const status = await pool.query(`
             SELECT status
             from HealthMetric
-            WHERE taskId = text(${taskId})
+            WHERE taskId = text('${taskId}')
             ORDER BY timestamp DESC
             LIMIT 1;
             
             `)
+
+            if(!status.rows[0]?.status) return {}
             // TODO: Change to taskId
         const aggData = await pool.query(`
         SELECT start_time as "startTime", end_time as "endTime"
         FROM state_periods(
                 (SELECT state_agg(timestamp, CAST(status as BIGINT))
-                 FROM HealthMetric WHERE taskId = text(${taskId})),
+                 FROM HealthMetric WHERE taskId = text('${taskId}')),
                  ${status.rows[0].status}
                  );
                  `, [])
         return {
             uptime: responseData.rows[0].uptime,
             performance: responseData.rows[0].performance,
-            status: aggData.rows[aggData.rows.length - 1]
+            status: {...aggData.rows[aggData.rows.length - 1],code :  status.rows[0].status},
+            
         }
     }
 
@@ -52,7 +55,7 @@ export class HealthMetricService {
         FROM HealthMetric
         WHERE timestamp >= '${startDate}'::timestamp
             AND timestamp <= '${endDate}'::timestamp 
-            AND taskId = '${taskId}'
+            AND taskId = text('${taskId}')
 
         ORDER BY timestamp DESC
         OFFSET ${offset}
@@ -90,7 +93,7 @@ export class HealthMetricService {
                    json_agg(json_build_object('responseTime', responseTime, 'status', status, 'timestamp', timestamp)) AS data
             from HealthMetric
             WHERE 
-                taskId = text(${taskId})
+                taskId = text('${taskId}')
                 AND timestamp >= '${startDate}'::timestamp
                 AND timestamp <= '${endDate}'::timestamp
             GROUP BY region;
@@ -108,7 +111,7 @@ export class HealthMetricService {
                        json_agg(json_build_object('average_status_percentage', average_status_percentage, 'timestamp', bucket)) AS data
                 from ${view}
                 WHERE 
-                    taskId = text(${taskId})
+                    taskId = text('${taskId}')
                     AND bucket >= '${startDate}'::timestamp
                     AND bucket <= '${endDate}'::timestamp
                 GROUP BY region;      
@@ -135,7 +138,7 @@ export class HealthMetricService {
                        round(approx_percentile(0.99, rollup(average_response_time))) as p99
                 from ${view}
                 WHERE 
-                    taskId = text(${taskId})
+                    taskId = text('${taskId}')
                     AND bucket >= '${startDate}'::timestamp
                     AND bucket <= '${endDate}'::timestamp
                 GROUP BY bucket;
@@ -164,7 +167,7 @@ export class HealthMetricService {
                                                                          average_response_time)) AS element) AS floored_array
                         from ${view}
                         WHERE 
-                            taskId = text(${taskId})
+                            taskId = text('${taskId}')
                             AND region = '${region}'
                             AND bucket >= '${startDate}'::timestamp
                             AND bucket <= '${endDate}'::timestamp
