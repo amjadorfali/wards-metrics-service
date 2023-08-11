@@ -48,14 +48,14 @@ export class HealthMetricService {
         }
     }
 
-    // TODO:Filter by incidents if needed (Status != 1)
-    getLogs(startDate: string | undefined, endDate: string | undefined, taskId: string, offset: number = 0,limit:number=0) {
+    getLogs(startDate: string | undefined, endDate: string | undefined, taskId: string, incidentsOnly:boolean=false , offset: number = 0,limit:number=0) {
       return  pool.query(`
         SELECT *
         FROM HealthMetric
-        WHERE timestamp >= '${startDate}'::timestamp
-            AND timestamp <= '${endDate}'::timestamp 
+        WHERE timestamp >= '${startDate}'
+            AND timestamp <= '${endDate}' 
             AND taskId = text('${taskId}')
+            ${incidentsOnly? 'AND status != 1' : '' }
 
         ORDER BY timestamp DESC
         OFFSET ${offset}
@@ -84,7 +84,6 @@ export class HealthMetricService {
         if (startDateMoment.isSame(endDateMoment, 'd')) {
 
             // Fetch all data from the DB for a single day
-            // TODO: Change to taskId
             const {rows} = await pool.query<{
                 region: string,
                 data: { responseTime: number, status: number, timestamp: string }[]
@@ -94,8 +93,8 @@ export class HealthMetricService {
             from HealthMetric
             WHERE 
                 taskId = text('${taskId}')
-                AND timestamp >= '${startDate}'::timestamp
-                AND timestamp <= '${endDate}'::timestamp
+                AND timestamp >= '${startDate}'
+                AND timestamp <= '${endDate}'
             GROUP BY region;
             `)
 
@@ -104,7 +103,6 @@ export class HealthMetricService {
             const view = startDateMoment.diff(endDateMoment, "d",) > 15 ? 'daily_health_metrics' : 'hourly_health_metrics'
             if (type === 'uptime') {
             // Fetch the Uptime from VIEW for a date interval
-            // TODO: Change to taskId
 
                 const {rows}  = await pool.query<{region:string, data:{'average_status_percentage':number, timestamp:string }[]}>(`
                 SELECT region,
@@ -112,8 +110,8 @@ export class HealthMetricService {
                 from ${view}
                 WHERE 
                     taskId = text('${taskId}')
-                    AND bucket >= '${startDate}'::timestamp
-                    AND bucket <= '${endDate}'::timestamp
+                    AND bucket >= '${startDate}'
+                    AND bucket <= '${endDate}'
                 GROUP BY region;      
                 `)
 
@@ -122,7 +120,6 @@ export class HealthMetricService {
             } else {
                 if (!region) {
             // Fetch the ResponseTime from VIEW for a date interval for all regions
-            // TODO: Change to taskId
 
                     const {rows} =  await pool.query<{bucket:string, "p10":number,
                     "p50":number,
@@ -139,8 +136,8 @@ export class HealthMetricService {
                 from ${view}
                 WHERE 
                     taskId = text('${taskId}')
-                    AND bucket >= '${startDate}'::timestamp
-                    AND bucket <= '${endDate}'::timestamp
+                    AND bucket >= '${startDate}'
+                    AND bucket <= '${endDate}'
                 GROUP BY bucket;
                     `)
 
@@ -158,7 +155,6 @@ export class HealthMetricService {
 
                 } else {
             // Fetch the ResponseTime from VIEW for a date interval for 1 region
-            // TODO: Change to taskId
                     const {rows} = await pool.query<{bucket:string, 'floored_array': [number,number,number,number,number]}>(`
                     SELECT region,
                                bucket,
@@ -169,8 +165,8 @@ export class HealthMetricService {
                         WHERE 
                             taskId = text('${taskId}')
                             AND region = '${region}'
-                            AND bucket >= '${startDate}'::timestamp
-                            AND bucket <= '${endDate}'::timestamp
+                            AND bucket >= '${startDate}'
+                            AND bucket <= '${endDate}'
                         ORDER BY bucket DESC;                   
                     `)
 

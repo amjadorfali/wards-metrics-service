@@ -22,14 +22,14 @@ healthMetricRoute.get("/overview",
             });
     });
 
-healthMetricRoute.get("/logs",
+healthMetricRoute.put("/logs",
     async (
         req: Request,
         res: Response,
         next: NextFunction
     ) => {
-        const {startDate, endDate,taskId, offset, limit} = req.query as any
-        return healthMetricService.getLogs(startDate, endDate, taskId, offset,limit).then(response => res.json(getResponse.success(response.rows)))
+        const { incidentsOnly, offset, limit,startDate, endDate, taskId } = req.body as any
+        return healthMetricService.getLogs(startDate, endDate, taskId, incidentsOnly, offset,limit).then(response => res.json(getResponse.success(response.rows)))
         .catch((e) => {
             next(e);
         });
