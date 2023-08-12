@@ -1,7 +1,7 @@
 import {pool} from "../db";
 import moment from "moment";
 
-type Percentile  = {data : string, responseTime : number}
+type Percentile  = {timestamp : string, responseTime : number}
 interface ResponseTimePercentiles {
     p10: Percentile[],
     p50: Percentile[],
@@ -9,6 +9,7 @@ interface ResponseTimePercentiles {
     p95: Percentile[],
     p99: Percentile[]
 }
+
 export class HealthMetricService {
 
     async getOverview(startDate: string | undefined, endDate: string | undefined, taskId:string) {
@@ -17,10 +18,11 @@ export class HealthMetricService {
                    floor(AVG(CASE WHEN status = 1 THEN 100.0 ELSE 0.0 END)) AS "uptime"
             
             FROM HealthMetric
-            WHERE HealthMetric.timestamp >= '${startDate}'
-                AND HealthMetric.timestamp <= '${endDate}';
+            WHERE taskId = text('${taskId}')
+                AND timestamp >= '${startDate}'
+                AND timestamp <= '${endDate}';
         `)
-        // TODO: Change to taskId
+
         const status = await pool.query(`
             SELECT status
             from HealthMetric
@@ -48,19 +50,22 @@ export class HealthMetricService {
         }
     }
 
-    getLogs(startDate: string | undefined, endDate: string | undefined, taskId: string, incidentsOnly:boolean=false , offset: number = 0,limit:number=0) {
-      return  pool.query(`
-        SELECT *
+    async getLogs(startDate: string | undefined, endDate: string | undefined, taskId: string, incidentsOnly:boolean=false , offset: number = 0,limit:number=0) {
+
+      const data = await  pool.query(`
+        SELECT *, text(timestamp) as timestamp, timestamp as dbTimeStamp, count(*) OVER() AS fullCount
         FROM HealthMetric
         WHERE timestamp >= '${startDate}'
             AND timestamp <= '${endDate}' 
             AND taskId = text('${taskId}')
             ${incidentsOnly? 'AND status != 1' : '' }
 
-        ORDER BY timestamp DESC
+        ORDER BY dbTimeStamp DESC
         OFFSET ${offset}
         LIMIT ${limit}
 `)
+
+return data
     }
 
     getDetails(date: string) {
@@ -89,24 +94,34 @@ export class HealthMetricService {
                 data: { responseTime: number, status: number, timestamp: string }[]
             }>(`
             SELECT region,
-                   json_agg(json_build_object('responseTime', responseTime, 'status', status, 'timestamp', timestamp)) AS data
+                   json_agg(json_build_object('responseTime', responseTime, 'status', status, 'timestamp', timestamp) ORDER BY timestamp) AS data
             from HealthMetric
             WHERE 
                 taskId = text('${taskId}')
                 AND timestamp >= '${startDate}'
                 AND timestamp <= '${endDate}'
+        
             GROUP BY region;
             `)
 
-            return rows
+            return rows.map((row)=>({
+region :row.region,
+data : row.data.map((data)=>({
+    // FIXME: When supporting more statuses
+    ...data, status : data.status === 1 ? 100 : 0
+}))
+            })) as {
+                region: string,
+                data: { responseTime: number, status: number, timestamp: string }[]
+            }[]
         } else {
-            const view = startDateMoment.diff(endDateMoment, "d",) > 15 ? 'daily_health_metrics' : 'hourly_health_metrics'
+            const view = endDateMoment.diff(startDate, "d") > 15 ? 'daily_health_metrics' : 'hourly_health_metrics'
             if (type === 'uptime') {
             // Fetch the Uptime from VIEW for a date interval
 
                 const {rows}  = await pool.query<{region:string, data:{'average_status_percentage':number, timestamp:string }[]}>(`
                 SELECT region,
-                       json_agg(json_build_object('average_status_percentage', average_status_percentage, 'timestamp', bucket)) AS data
+                       json_agg(json_build_object('average_status_percentage', average_status_percentage, 'timestamp', bucket) ORDER BY bucket) AS data
                 from ${view}
                 WHERE 
                     taskId = text('${taskId}')
@@ -138,17 +153,18 @@ export class HealthMetricService {
                     taskId = text('${taskId}')
                     AND bucket >= '${startDate}'
                     AND bucket <= '${endDate}'
-                GROUP BY bucket;
+                GROUP BY bucket
+                ORDER BY bucket;
                     `)
 
                     
                     return rows.reduce<ResponseTimePercentiles> ((prev, curr)=>{
                                     const {bucket, p10, p50, p90, p95, p99} = curr
-                                    prev.p10.push({data: bucket, responseTime: p10})
-                                    prev.p50.push({data: bucket, responseTime: p50})
-                                    prev.p90.push({data: bucket, responseTime: p90})
-                                    prev.p95.push({data: bucket, responseTime: p95})
-                                    prev.p99.push({data: bucket, responseTime: p99})
+                                    prev.p10.push({timestamp: bucket, responseTime: p10})
+                                    prev.p50.push({timestamp: bucket, responseTime: p50})
+                                    prev.p90.push({timestamp: bucket, responseTime: p90})
+                                    prev.p95.push({timestamp: bucket, responseTime: p95})
+                                    prev.p99.push({timestamp: bucket, responseTime: p99})
                                     return prev
                                 
                         }, {p10 : [], p50 : [], p90 : [], p95 : [], p99 : [] } as ResponseTimePercentiles);
@@ -167,16 +183,16 @@ export class HealthMetricService {
                             AND region = '${region}'
                             AND bucket >= '${startDate}'
                             AND bucket <= '${endDate}'
-                        ORDER BY bucket DESC;                   
+                        ORDER BY bucket;                   
                     `)
 
                     return rows.reduce<ResponseTimePercentiles> ((prev, curr)=>{
                         const {bucket, floored_array} = curr
-                        prev.p10.push({data: bucket, responseTime: floored_array[0]})
-                        prev.p50.push({data: bucket, responseTime: floored_array[1]})
-                        prev.p90.push({data: bucket, responseTime: floored_array[2]})
-                        prev.p95.push({data: bucket, responseTime: floored_array[3]})
-                        prev.p99.push({data: bucket, responseTime: floored_array[4]})
+                        prev.p10.push({timestamp: bucket, responseTime: floored_array[0]})
+                        prev.p50.push({timestamp: bucket, responseTime: floored_array[1]})
+                        prev.p90.push({timestamp: bucket, responseTime: floored_array[2]})
+                        prev.p95.push({timestamp: bucket, responseTime: floored_array[3]})
+                        prev.p99.push({timestamp: bucket, responseTime: floored_array[4]})
 
                         return prev
                     },{p10 : [], p50 : [], p90 : [], p95 : [], p99 : [] } as ResponseTimePercentiles)
