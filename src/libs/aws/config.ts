@@ -11,3 +11,4 @@ export const awsConfig = {
     secretAccessKey: AWS_SECRET_ACCESS_KEY,
   },
 };
+
