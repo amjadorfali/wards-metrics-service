@@ -3,9 +3,9 @@ import PG from "pg";
 const Pool = PG.Pool;
 
 export const pool = new Pool({
-  user: "remoteops-master",
-  host: "localhost",
-  database: "postgres",
-  password: "metric123",
-  port: 5432
+    user: process.env.TIMESCALE_USER,
+    host: process.env.TIMESCALE_HOST,
+    database: process.env.TIMESCALE_DATABASE,
+    password: process.env.TIMESCALE_PASSWORD,
+    port: 5432
 });

@@ -1,6 +1,12 @@
 import express from "express";
 
-require("dotenv").config();
+let environment = process.env.ACTIVE_PROFILE;
+
+if (!environment) {
+    require('dotenv').config();
+    environment = process.env.ACTIVE_PROFILE;
+}
+
 
 import helmet from "helmet";
 import {standardLimiter} from "./utils/rateLimiters";
