@@ -27,6 +27,6 @@ pool.connect()
 
 app.use("/api/health", standardLimiter, healthMetricRoute);
 
-
+app.get("/api/health-check").status(200);
 const port = 3201;
 app.listen(port, () => console.log(`Example app listening at http://localhost:${port}`))
