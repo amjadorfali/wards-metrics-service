@@ -32,8 +32,7 @@ export class HealthMetricService {
             
             `)
 
-            if(!status.rows[0]?.status) return {}
-            // TODO: Change to taskId
+            if(!(typeof status.rows[0]?.status === 'number')) return {}
         const aggData = await pool.query(`
         SELECT start_time as "startTime", end_time as "endTime"
         FROM state_periods(
